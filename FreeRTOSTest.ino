@@ -7,7 +7,10 @@ int DIN = 3;
 int CS = 2;
 int CLK = 5;
 int buzzerOutput = 4;
+int count = 0;
 LedControl lc=LedControl(DIN, CLK, CS,0);
+String firstline = "00:00:00";
+String secondline = "Initializing...";
 
 char font8x8_basic[132][8] = {
     { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},   // U+0000 (nul)
@@ -147,27 +150,146 @@ char font8x8_basic[132][8] = {
 
 void updateLCD(void * parameters){
   for(;;){
+    lcd.clear();
     lcd.setCursor(0, 0);
-    lcd.print("Hello, World!");
+    lcd.print(firstline);
     lcd.setCursor(0, 1);
-    lcd.print(millis() / 1000);
+    lcd.print(secondline);
     vTaskDelay(1000 / portTICK_PERIOD_MS);
   }
 }
 
+//use the array of characters to write the quote "let go of your earthly tether, enter the void, empty and become wind" to the led matrix
+int array[68] = {108, 101, 116, 32, 103, 111, 32, 111, 102, 32, 121, 111, 117, 114, 32, 101, 97, 114, 116, 104, 108, 121, 32, 116, 101, 116, 104, 101, 114, 44, 32, 101, 110, 116, 101, 114, 32, 116, 104, 101, 32, 118, 111, 105, 100, 44, 32, 101, 109, 112, 116, 121, 32, 97, 110, 100, 32, 98, 101, 99, 111, 109, 101, 32, 119, 105, 110, 100};
+
+
+int num = 0;
 void updateLEDMatrix(void * parameters){
   for(;;){
     //clear the display
     lc.clearDisplay(0);
     //print a random character
-    int x = random(0, 132);
     for (int i = 0; i < 8; i++){
-      lc.setRow(0, i, font8x8_basic[x][i]);
+      lc.setRow(0, 7-i, font8x8_basic[array[num]][i]);
     }
-    //buzzer
-    tone(buzzerOutput, 1000, 100);
-    vTaskDelay(2000 / portTICK_PERIOD_MS);
+    if(num > 67){
+      lc.clearDisplay(0);
+      vTaskDelay(20000 / portTICK_PERIOD_MS);
+      num = 0;
+    }
+    else{
+      num++;
+    }
+    vTaskDelay(500 / portTICK_PERIOD_MS);
 
+
+  }
+}
+
+void readSerial(void * parameters){
+  for(;;){
+    if(Serial.available() > 0){
+      //read the serial input
+      String input = Serial.readString();
+      //split it by a space
+      String array[2];
+      int index = 0;
+      bool firstspace = false;
+      for(int i = 0; i < input.length(); i++){
+        if(input[i] == ' ' and firstspace == false){
+          firstspace = true;
+          index++;
+        }
+        else{
+          array[index] += input[i];
+        }
+      }
+      //set the first line to the first word
+      //reset the other tasks so they use the updated firstline
+      taskENTER_CRITICAL();
+      firstline = array[0];
+      //set the second line to the second word
+      secondline = array[1];
+      // Serial.println(firstline);
+      taskEXIT_CRITICAL();
+      vTaskDelay(10 / portTICK_PERIOD_MS);
+    }
+  }
+}
+
+void updateTime(String * parameters){
+  //parse the time string (firstline)
+  //update this string every second to reflect the new time
+  for(;;){
+    int hour = 0;
+    int minute = 0;
+    int second = 0;
+    //split the string using a colon
+    String array[3];
+    int index = 0;
+    for(int i = 0; i < firstline.length(); i++){
+      if(firstline[i] == ':'){
+        index++;
+      }
+      else{
+        array[index] += firstline[i];
+      }
+    }
+    // Serial.println("array[0] = " + array[0]);
+    // Serial.println("array[1] = " + array[1]);
+    // Serial.println("array[2] = " + array[2]);
+    // Serial.println("firstline = " + firstline);
+    //remove the leading 0s
+    if(array[0][0] == '0'){
+      array[0] = array[0].substring(1);
+    }
+    if(array[1][0] == '0'){
+      array[1] = array[1].substring(1);
+    }
+    if(array[2][0] == '0'){
+      array[2] = array[2].substring(1);
+    }
+    //convert the strings to ints
+    hour = array[0].toInt();
+    minute = array[1].toInt();
+    second = array[2].toInt();
+    //increment the numbers as necessary
+    second++;
+    if(second > 59){
+      second = 0;
+      minute++;
+    }
+    if(minute > 59){
+      minute = 0;
+      hour++;
+    }
+    if(hour > 23){
+      hour = 0;
+    }
+    //update the string (if the number is less than 10, add a 0 in front of it)
+    String k = "";
+    if(hour < 10){
+      k = "0" + String(hour) + ":";
+    }
+    else{
+      k = String(hour) + ":";
+    }
+    if(minute < 10){
+      k += "0" + String(minute) + ":";
+    }
+    else{
+      k += String(minute) + ":";
+    }
+    if(second < 10){
+      k += "0" + String(second);
+    }
+    else{
+      k += String(second);
+    }
+    if (k != firstline){
+      firstline = k;
+    }
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
   }
 }
 
@@ -176,17 +298,15 @@ void updateLEDMatrix(void * parameters){
 
 
 void setup() {
+  lcd.begin(16, 2);
   lc.shutdown(0,false);
   lc.setIntensity(0,0);
   lc.clearDisplay(0);
-  pinMode(buzzerOutput, OUTPUT);
-
-  Serial.println("Initializing System");
-  Serial.begin(9600);
-  Serial.println("counting 1 creation");
+  Serial.begin(115200);
   xTaskCreate(updateLCD, "updateLCD", 128, NULL, 1, NULL);
-  Serial.println("counting 2 creation");
-  xTaskCreate(updateLEDMatrix, "updateLEDMatrix", 128, NULL, 1, NULL);
+  xTaskCreate(updateLEDMatrix, "updateLEDMatrix", 128, NULL, 2, NULL);
+  xTaskCreate(readSerial, "readSerial", 128, NULL, 0, NULL);
+  xTaskCreate(updateTime, "updateTime", 128, NULL, 3, NULL);
 
 }
 
