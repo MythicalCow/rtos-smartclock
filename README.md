@@ -1,4 +1,4 @@
-https://youtu.be/1vFQBE2QWlg
+**Video Demonstration**: https://youtu.be/1vFQBE2QWlg
 
 # rtos-smartclock
 A smart clock with weather, time, and alarm system using FreeRTOS. Custom quote is displayed on an 8x8 LED matrix. The system makes use of libraries such as Arduino_FreeRTOS, LedControl, LiquidCrystal for the Arduino script. For the Raspberry Pi script the serial, requests, and datetime libraries were used. The Raspberry Pi communicates with the Arduino over a serial protocol using a USB cable at a baudrate of 115200.
